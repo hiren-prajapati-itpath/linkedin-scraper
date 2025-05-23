@@ -1127,7 +1127,7 @@ class LinkedinService {
             });
 
             // Quick expand sections function - try to expand "See more" links
-            //await this.expandAllSections(page);
+            await this.expandAllSections(page);
 
             // Simple and efficient scroll to load content
             await page.evaluate(async () => {
@@ -1150,7 +1150,7 @@ class LinkedinService {
             });
 
             // One last attempt to expand any sections that might have loaded
-            //await this.expandAllSections(page);
+            await this.expandAllSections(page);
 
             // Make sure we're fully loaded
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1173,77 +1173,154 @@ class LinkedinService {
             await page.evaluate(async () => {
                 // List of possible selectors for "See more" buttons
                 const expandButtons = [
-                    // Standard "See more" buttons
-                    'button.inline-show-more-text__button',
-                    'button.lt-line-clamp__more',
-                    'button.pv-profile-section__see-more-inline',
-                    'button.pv-top-card-section__summary-toggle-button',
-                    'button[data-control-name="contact_see_more"]',
 
-                    // Buttons with "see more" text
-                    'button:not([disabled])[aria-expanded="false"]',
-                    'a[role="button"]:not([disabled])[aria-expanded="false"]',
-                    'button.artdeco-button:not([disabled])',
-
-                    // "Show all" variations
-                    'button.pv-profile-section__card-action-bar',
+                    // Skills section specific buttons (2023-2025)
                     'button.pv-skills-section__additional-skills',
-                    'button.artdeco-card__actions',
+                    'button[aria-label="Show all skills"]',
+                    'button[aria-label="Show more skills"]',
+                    'button[data-control-name="skill_details"]',
+                    'button.artdeco-button[aria-controls*="skill"]',
 
-                    // LinkedIn 2025 update selectors
-                    'button.see-more-inline',
-                    'button.show-more-section',
-                    'button[data-test-id="show-more-less-button"]',
-                    'button.artdeco-button--tertiary',
+                    // Experience and Education expansion buttons
+                    'button[aria-label="Show more experience"]',
+                    'button[aria-label="Show more education"]',
+                    'button[aria-controls*="education-section"]',
+                    'button[aria-controls*="experience-section"]',
 
-                    // Additional specialized buttons
-                    '.pvs-list__footer-wrapper button'
                 ];
 
                 // Helper function for minimal delays
                 const minimalDelay = () => new Promise(r => setTimeout(r, 100));
 
+                // Function to handle clicks with better error handling
+                const safeClick = async (element) => {
+                    if (!element || typeof element.click !== 'function' || element.offsetParent === null) {
+                        return false;
+                    }
+
+                    try {
+                        // Log before clicking for debugging
+                        console.log(`Clicking element: ${element.tagName} | Text: ${element.textContent.trim().substring(0, 30)}`);
+
+                        // Simple click without animations
+                        element.click();
+                        await minimalDelay();
+                        return true;
+                    } catch (e) {
+                        // Silently continue
+                        return false;
+                    }
+                };
+
                 // Try to click on expand buttons efficiently
                 for (const selector of expandButtons) {
-                    const buttons = document.querySelectorAll(selector);
-                    if (buttons.length > 0) {
-                        console.log(`Found ${buttons.length} expand buttons with selector: ${selector}`);
-                        for (const button of buttons) {
-                            if (button && button.click && button.offsetParent !== null) {
-                                try {
-                                    // Simple click without animations
-                                    button.click();
-                                    await minimalDelay();
-                                } catch (e) {
-                                    // Silently continue to next button
-                                }
+                    try {
+                        const buttons = document.querySelectorAll(selector);
+                        if (buttons.length > 0) {
+                            console.log(`Found ${buttons.length} expand buttons with selector: ${selector}`);
+                            for (const button of buttons) {
+                                await safeClick(button);
                             }
+                        }
+                    } catch (err) {
+                        console.log(`Error with selector ${selector}: ${err.message}`);
+                    }
+                }
+
+                // Wait a bit for content to update
+                await new Promise(r => setTimeout(r, 500));
+
+                // Additional pass specifically for skills section
+                const skillsContainers = [
+                    '.pv-skills-section',
+                    '.skills-section',
+                    'section[aria-label*="skill"]',
+                    'section[id*="skill"]',
+                    '.profile-section[id*="skill"]'
+                ];
+
+                for (const container of skillsContainers) {
+                    const skillsSection = document.querySelector(container);
+                    if (skillsSection) {
+                        console.log(`Found skills section with selector: ${container}`);
+                        // Find any buttons inside this section
+                        const skillButtons = skillsSection.querySelectorAll('button');
+                        for (const button of skillButtons) {
+                            await safeClick(button);
                         }
                     }
                 }
 
-                // Additional pass for any text-based "See more" links
+                // Text-based expander pass for any buttons with relevant text
                 const textBasedExpanders = Array.from(document.querySelectorAll('button, a[role="button"]'))
                     .filter(el => {
-                        const text = el.textContent.toLowerCase();
+                        if (!el || !el.textContent) return false;
+
+                        const text = el.textContent.toLowerCase().trim();
                         return (text.includes('see more') ||
                             text.includes('show more') ||
                             text.includes('show all') ||
                             text.includes('view all') ||
-                            text.includes('view more')) &&
+                            text.includes('view more') ||
+                            text.includes('expand') ||
+                            text.includes('show additional skills') ||
+                            text === 'more' ||
+                            text.match(/show \d+ skills/)) &&
                             !el.disabled;
                     });
 
+                console.log(`Found ${textBasedExpanders.length} text-based expanders`);
+
                 for (const expander of textBasedExpanders) {
+                    await safeClick(expander);
+                }
+
+                // One final pass for specific text content for skills
+                const skillsTextExpanders = Array.from(document.querySelectorAll('button, a[role="button"]'))
+                    .filter(el => {
+                        if (!el || !el.textContent) return false;
+                        const text = el.textContent.toLowerCase().trim();
+                        return text.includes('skill') &&
+                            (text.includes('show') || text.includes('see') || text.includes('more') || text.includes('all'));
+                    });
+
+                console.log(`Found ${skillsTextExpanders.length} skills-specific expanders`);
+
+                for (const skillExpander of skillsTextExpanders) {
+                    await safeClick(skillExpander);
+                }
+
+            }).catch(err => {
+                LogHelper.info(`Non-critical error expanding sections: ${err.message}`);
+            });
+
+            // Give a bit more time for skill sections to fully expand
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Try a second pass specifically for skills sections that might have loaded after first pass
+            await page.evaluate(async () => {
+                const minimalDelay = () => new Promise(r => setTimeout(r, 100));
+
+                // Only target skills-related buttons in second pass
+                const skillsButtons = Array.from(document.querySelectorAll('button, a[role="button"]'))
+                    .filter(el => {
+                        if (!el || !el.textContent || !el.offsetParent) return false;
+                        const text = el.textContent.toLowerCase().trim();
+                        return text.includes('skill') && !el.disabled;
+                    });
+
+                console.log(`Second pass: Found ${skillsButtons.length} skills buttons`);
+
+                for (const button of skillsButtons) {
                     try {
-                        expander.click();
+                        button.click();
                         await minimalDelay();
                     } catch (e) {
                         // Silently continue
                     }
                 }
             }).catch(err => {
-                LogHelper.info(`Non-critical error expanding sections: ${err.message}`);
+                LogHelper.info(`Non-critical error in second pass: ${err.message}`);
             });
 
             // Brief wait for any lazy-loaded content

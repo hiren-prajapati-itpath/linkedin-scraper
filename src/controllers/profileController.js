@@ -91,6 +91,9 @@ const sessionManager = require('../helpers/sessionManager');
 
 puppeteer.use(StealthPlugin());
 
+// Rate limiting - track the timestamp of the last profile request
+let lastProfileRequestTime = 0;
+
 class ProfileController {
     static async takeScreenshot(req, res) {
         try {
@@ -103,11 +106,27 @@ class ProfileController {
                 });
             }
 
+            // Apply rate limiting - ensure we wait between requests
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastProfileRequestTime;
+            const requiredDelay = config.RATE_LIMITING.PROFILE_REQUEST_DELAY_MS;
+
+            if (lastProfileRequestTime > 0 && timeSinceLastRequest < requiredDelay) {
+                // Need to wait before processing this request
+                const waitTimeMs = requiredDelay - timeSinceLastRequest;
+                LogHelper.info(`Rate limiting: Waiting ${Math.round(waitTimeMs / 1000)} seconds before processing next profile request`);
+
+                await new Promise(resolve => setTimeout(resolve, waitTimeMs));
+            }
+
+            // Update the last request timestamp
+            lastProfileRequestTime = Date.now();
+
             // Use persistent session
             const page = await sessionManager.getPage();
             await sessionManager.ensureLogin();
 
-            // Step 2: Navigate to profile and take screenshot
+            // Navigate to profile and take screenshot
             LogHelper.info(`Navigating to profile: ${profileUrl}`);
             const { success, screenshotPath } = await LinkedinService.navigateToProfile(page, profileUrl);
 

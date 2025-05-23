@@ -48,12 +48,15 @@ const config = {
         '--ignore-certificate-errors-spki-list',
         '--disable-features=IsolateOrigins,site-per-process',
         '--disable-site-isolation-trials'
-    ],
-
-    // Screenshot Configuration
+    ],    // Screenshot Configuration
     SCREENSHOT_OPTIONS: {
         fullPage: true,
         type: 'png'  // Using PNG format which doesn't support quality parameter
+    },
+
+    // Rate limiting configuration
+    RATE_LIMITING: {
+        PROFILE_REQUEST_DELAY_MS: 72000 // 2 minutes delay between profile requests
     }
 };
 

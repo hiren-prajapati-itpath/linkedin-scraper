@@ -1,8 +1,3 @@
-// const puppeteer = require('puppeteer-extra');
-// const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-// const randomUseragent = require('random-useragent');
-// const LogHelper = require('./logHelper');
-
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const randomUseragent = require('random-useragent');

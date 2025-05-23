@@ -428,16 +428,37 @@ class LinkedinService {
         return false;
     }
 
+    static async safeElementDetection(page, selector) {
+        try {
+            return await page.$(selector);
+        } catch (error) {
+            if (error.message.includes('detached Frame') ||
+                error.message.includes('Session closed')) {
+                return null;
+            }
+            throw error;
+        }
+    }
+
     static async detectCaptcha(page) {
         try {
             // Check URL first
-            const currentUrl = await page.url();
-            if (currentUrl.includes('checkpoint/challenge') ||
-                currentUrl.includes('checkpoint/challenge/recaptcha') ||
-                currentUrl.includes('checkpoint/challenge/email-confirmation') ||
-                currentUrl.includes('checkpoint/challenge/edd') ||
-                currentUrl.includes('security-verification')) {
-                return true;
+            try {
+                const currentUrl = await page.url();
+                if (currentUrl.includes('checkpoint/challenge') ||
+                    currentUrl.includes('checkpoint/challenge/recaptcha') ||
+                    currentUrl.includes('checkpoint/challenge/email-confirmation') ||
+                    currentUrl.includes('checkpoint/challenge/edd') ||
+                    currentUrl.includes('security-verification')) {
+                    return true;
+                }
+            } catch (urlError) {
+                if (urlError.message.includes('detached Frame') ||
+                    urlError.message.includes('Session closed')) {
+                    LogHelper.info('Frame detached during URL check in detectCaptcha');
+                    return false; // Can't determine CAPTCHA state with detached frame
+                }
+                throw urlError;
             }
 
             // Check for common CAPTCHA and verification elements
@@ -486,61 +507,82 @@ class LinkedinService {
             ];
 
             for (const selector of captchaSelectors) {
-                if (await page.$(selector) !== null) {
-                    return true;
-                }
+                const element = await this.safeElementDetection(page, selector);
+                if (element) return true;
             }
 
             // Check for reCAPTCHA frames
-            const frames = page.frames();
-            const hasCaptchaFrame = frames.some(frame => {
-                const url = frame.url();
-                return url.includes('recaptcha') ||
-                    url.includes('captcha') ||
-                    url.includes('challenge');
-            });
+            try {
+                const frames = page.frames();
+                const hasCaptchaFrame = frames.some(frame => {
+                    try {
+                        const url = frame.url();
+                        return url.includes('recaptcha') ||
+                            url.includes('captcha') ||
+                            url.includes('challenge');
+                    } catch (e) {
+                        return false; // Ignore errors in individual frames
+                    }
+                });
 
-            if (hasCaptchaFrame) {
-                return true;
+                if (hasCaptchaFrame) {
+                    return true;
+                }
+            } catch (frameError) {
+                if (frameError.message.includes('detached Frame') ||
+                    frameError.message.includes('Session closed')) {
+                    LogHelper.info('Frame detached during frame check in detectCaptcha');
+                    return false;
+                }
+                throw frameError;
             }
 
             // Check page content for CAPTCHA related text
-            const pageContent = await page.content();
-            const captchaKeywords = [
-                'verification challenge',
-                'security check',
-                "let's do a quick security check",
-                'prove you\'re not a robot',
-                'confirm your identity',
-                'unusual login attempt',
-                'verify it\'s you',
-                'verification code',
-                'security verification',
-                'human verification',
-                'automated access',
-                'suspicious activity',
-                'bot detection',
-                'unusual activity',
-                'security concern',
-                'identity check',
-                'two-step verification',
-                'enter the code',
-                'verify your account',
-                'verify your identity',
-                'we need to verify',
-                'not a robot',
-                'robot check',
-                // LinkedIn specific verification phrases
-                'we detected unusual activity',
-                'check your inbox for a verification link',
-                'help us keep your account secure',
-                'confirm it\'s you',
-                'security verification step'
-            ];
+            try {
+                const pageContent = await page.content();
+                const captchaKeywords = [
+                    'verification challenge',
+                    'security check',
+                    "let's do a quick security check",
+                    'prove you\'re not a robot',
+                    'confirm your identity',
+                    'unusual login attempt',
+                    'verify it\'s you',
+                    'verification code',
+                    'security verification',
+                    'human verification',
+                    'automated access',
+                    'suspicious activity',
+                    'bot detection',
+                    'unusual activity',
+                    'security concern',
+                    'identity check',
+                    'two-step verification',
+                    'enter the code',
+                    'verify your account',
+                    'verify your identity',
+                    'we need to verify',
+                    'not a robot',
+                    'robot check',
+                    // LinkedIn specific verification phrases
+                    'we detected unusual activity',
+                    'check your inbox for a verification link',
+                    'help us keep your account secure',
+                    'confirm it\'s you',
+                    'security verification step'
+                ];
 
-            return captchaKeywords.some(keyword =>
-                pageContent.toLowerCase().includes(keyword.toLowerCase())
-            );
+                return captchaKeywords.some(keyword =>
+                    pageContent.toLowerCase().includes(keyword.toLowerCase())
+                );
+            } catch (contentError) {
+                if (contentError.message.includes('detached Frame') ||
+                    contentError.message.includes('Session closed')) {
+                    LogHelper.info('Frame detached during content check in detectCaptcha');
+                    return false;
+                }
+                throw contentError;
+            }
 
         } catch (error) {
             LogHelper.error('Error in CAPTCHA detection:', error);

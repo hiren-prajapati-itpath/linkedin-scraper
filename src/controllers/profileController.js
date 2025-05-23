@@ -15,7 +15,7 @@
 //         let browser;
 //         try {
 //             const { profileUrl } = req.body;
-            
+
 //             if (!profileUrl || !profileUrl.includes('linkedin.com/')) {
 //                 return res.status(400).json({ 
 //                     error: 'Invalid LinkedIn URL', 
@@ -26,7 +26,7 @@
 //             // Initialize browser with stealth mode
 //             let { browser: newBrowser, page } = await BrowserHelper.initBrowser();
 //             browser = newBrowser;
-            
+
 //             // Set navigation timeout
 //             await page.setDefaultNavigationTimeout(60000);
 
@@ -50,7 +50,7 @@
 
 //         } catch (error) {
 //             LogHelper.error('Profile screenshot operation failed:', error);
-            
+
 //             let statusCode = 500;
 //             if (error.message.includes('Invalid LinkedIn URL')) {
 //                 statusCode = 400;
@@ -62,7 +62,7 @@
 //                 error: 'Screenshot operation failed',
 //                 message: error.message
 //             });
-            
+
 //         } finally {
 //             if (browser) {
 //                 try {
@@ -87,35 +87,25 @@ const LogHelper = require('../helpers/logHelper');
 const config = require('../config/config');
 const path = require('path');
 const fs = require('fs').promises;
+const sessionManager = require('../helpers/sessionManager');
 
 puppeteer.use(StealthPlugin());
 
 class ProfileController {
     static async takeScreenshot(req, res) {
-        let browser;
         try {
             const { profileUrl } = req.body;
-            
+
             if (!profileUrl || !profileUrl.includes('linkedin.com/')) {
-                return res.status(400).json({ 
-                    error: 'Invalid LinkedIn URL', 
-                    message: 'Please provide a valid LinkedIn profile URL' 
+                return res.status(400).json({
+                    error: 'Invalid LinkedIn URL',
+                    message: 'Please provide a valid LinkedIn profile URL'
                 });
             }
 
-            // Initialize browser with stealth mode
-            let { browser: newBrowser, page } = await BrowserHelper.initBrowser();
-            browser = newBrowser;
-            
-            // Set navigation timeout
-            await page.setDefaultNavigationTimeout(60000);
-
-            // Step 1: Login to LinkedIn
-            LogHelper.info('Starting LinkedIn login process...');
-            const loginResult = await LinkedinService.login(page, browser);
-            // Update browser and page references if changed during login (e.g., due to CAPTCHA)
-            browser = loginResult.browser;
-            page = loginResult.page;
+            // Use persistent session
+            const page = await sessionManager.getPage();
+            await sessionManager.ensureLogin();
 
             // Step 2: Navigate to profile and take screenshot
             LogHelper.info(`Navigating to profile: ${profileUrl}`);
@@ -130,7 +120,7 @@ class ProfileController {
 
         } catch (error) {
             LogHelper.error('Profile screenshot operation failed:', error);
-            
+
             let statusCode = 500;
             if (error.message.includes('Invalid LinkedIn URL')) {
                 statusCode = 400;
@@ -142,16 +132,6 @@ class ProfileController {
                 error: 'Screenshot operation failed',
                 message: error.message
             });
-            
-        } finally {
-            if (browser) {
-                try {
-                    await browser.close();
-                    LogHelper.info('Browser closed successfully');
-                } catch (err) {
-                    LogHelper.error('Error closing browser:', err);
-                }
-            }
         }
     }
 }
